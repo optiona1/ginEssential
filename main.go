@@ -6,7 +6,6 @@ import (
 	"zd.xyz/ginessential/common"
 )
 
-
 func main() {
 	db := common.InitDB()
 	defer db.Close()

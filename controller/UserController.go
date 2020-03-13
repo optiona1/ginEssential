@@ -3,12 +3,12 @@ package controller
 import (
 	"github.com/gin-gonic/gin"
 	"github.com/jinzhu/gorm"
+	"golang.org/x/crypto/bcrypt"
 	"net/http"
-	"log"
 	"strconv"
+	"zd.xyz/ginessential/common"
 	"zd.xyz/ginessential/model"
 	"zd.xyz/ginessential/util"
-	"zd.xyz/ginessential/common"
 )
 
 func Register(ctx *gin.Context) {
@@ -49,7 +49,6 @@ func Register(ctx *gin.Context) {
 		name = util.RandomString(10)
 	}
 
-	log.Println(name, telephone, password)
 	// 判断手机号是否存在
 	if isTelephoneExist(DB, telephone) {
 		ctx.JSON(http.StatusUnprocessableEntity, gin.H{
@@ -60,10 +59,18 @@ func Register(ctx *gin.Context) {
 	}
 
 	// 创建用户
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		ctx.JSON(http.StatusInternalServerError, gin.H{
+			"code": 500,
+			"msg":  "加密异常",
+		})
+		return
+	}
 	newUser := model.User{
 		Name:      name,
 		Telephone: telephone,
-		Password:  password,
+		Password:  string(hashedPassword),
 	}
 	DB.Create(&newUser)
 
@@ -74,11 +81,65 @@ func Register(ctx *gin.Context) {
 }
 
 func isTelephoneExist(db *gorm.DB, telephone string) bool {
-        var user model.User
-        db.Where("telephone = ?", telephone).First(&user)
-        if user.ID != 0 {
-                return true
-        }
-        return false
+	var user model.User
+	db.Where("telephone = ?", telephone).First(&user)
+	if user.ID != 0 {
+		return true
+	}
+	return false
 }
 
+func Login(ctx *gin.Context) {
+	DB := common.DB
+	// 获取参数
+	telephone := ctx.PostForm("telephone")
+	password := ctx.PostForm("password")
+
+	// 数据验证
+	if len(telephone) != 11 {
+		ctx.JSON(http.StatusUnprocessableEntity, gin.H{
+			"code": 422,
+			"msg":  "账号或密码错误",
+		})
+		return
+	}
+
+	_, err := strconv.Atoi(telephone)
+	if err != nil {
+		ctx.JSON(http.StatusUnprocessableEntity, gin.H{
+			"code": 422,
+			"msg":  "账号或密码错误",
+		})
+		return
+	}
+
+	// 判断手机号是否存在
+	var user model.User
+	DB.Where("telephone = ?", telephone).First(&user)
+	if user.ID == 0 {
+		ctx.JSON(http.StatusUnprocessableEntity, gin.H{
+			"code": 442,
+			"msg":  "账号或密码错误",
+		})
+		return
+	}
+
+	// 判断密码时候正确
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
+		ctx.JSON(http.StatusBadRequest, gin.H{
+			"code": 400,
+			"msg":  "账号或密码错误",
+		})
+		return
+	}
+
+	// 发放 token
+	token := "11"
+
+	// 返回结果
+	ctx.JSON(http.StatusOK, gin.H{
+		"code": 200,
+		"data": gin.H{"token": token},
+		"msg":  "登录成功",
+	})
+}
