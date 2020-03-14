@@ -15,6 +15,10 @@ func main() {
 
 	r := gin.Default()
 	r = CollectRoute(r)
+	port := viper.GetString("server.port")
+	if port != "" {
+		panic(r.Run(":" + port))
+	}
 	panic(r.Run())
 }
 
